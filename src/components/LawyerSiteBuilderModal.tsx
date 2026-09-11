@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { firmService } from '../services/firmService';
 import { LawFirm } from '../types';
+import { COUNTRIES_LIST } from '../data/countries';
 
 interface LawyerSiteBuilderModalProps {
   isOpen: boolean;
@@ -88,11 +89,14 @@ export const LawyerSiteBuilderModal: React.FC<LawyerSiteBuilderModalProps> = ({
     setErrorMsg('');
 
     try {
+      const selectedCountryObj = COUNTRIES_LIST.find(c => c.ar === countryAr) || { ar: 'المملكة العربية السعودية', en: 'Saudi Arabia' };
       const res = await firmService.createFirm({
         nameAr: nameAr.trim(),
         nameEn: nameEn.trim() || 'Law Firm & Counsel',
         taglineAr: taglineAr.trim(),
         cityAr: cityAr.trim(),
+        countryAr: selectedCountryObj.ar,
+        countryEn: selectedCountryObj.en,
         phone: phone.trim() || whatsapp.trim(),
         email: email.trim(),
         licenseNumber: licenseNumber.trim(),
@@ -256,19 +260,35 @@ export const LawyerSiteBuilderModal: React.FC<LawyerSiteBuilderModalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {isAr ? 'الدولة التي تعمل فيها' : 'Country'}
+                  </label>
+                  <select
+                    value={countryAr}
+                    onChange={(e) => setCountryAr(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-[#c5a869] focus:outline-none"
+                  >
+                    {COUNTRIES_LIST.map((c) => (
+                      <option key={c.ar} value={c.ar}>{c.ar}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
                     {isAr ? 'المدينة' : 'City'}
                   </label>
                   <input
                     type="text"
-                    placeholder={isAr ? 'الرياض / دبي / القاهرة / إسطنبول' : 'Riyadh / Dubai'}
+                    placeholder={isAr ? 'الرياض / دبي / القاهرة' : 'Riyadh / Dubai'}
                     value={cityAr}
                     onChange={(e) => setCityAr(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-[#c5a869] focus:outline-none"
                   />
                 </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
                     {isAr ? 'رقم ترخيص المحاماة' : 'Bar License Number'}

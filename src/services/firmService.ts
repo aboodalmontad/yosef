@@ -1203,6 +1203,8 @@ class FirmService {
     slug?: string;
     cityAr?: string;
     cityEn?: string;
+    countryAr?: string;
+    countryEn?: string;
     phone?: string;
     email?: string;
     adminPassword?: string;
@@ -1241,6 +1243,9 @@ class FirmService {
       adminPassword: info.adminPassword || '123456',
     };
 
+    const cAr = info.countryAr || 'المملكة العربية السعودية';
+    const cEn = info.countryEn || 'Saudi Arabia';
+
     const newFirm: LawFirm = {
       id: toValidUUID(`firm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
       slug: finalSlug,
@@ -1250,6 +1255,8 @@ class FirmService {
       taglineEn: 'Premier Legal Consultancy',
       cityAr: info.cityAr || 'الرياض',
       cityEn: info.cityEn || 'Riyadh',
+      countryAr: cAr,
+      countryEn: cEn,
       phone: info.phone || '+966 11 000 0000',
       email: info.email || 'info@lawfirm.com',
       licenseNumber: info.licenseNumber || '',
@@ -1271,8 +1278,8 @@ class FirmService {
             id: `off-${Date.now()}`,
             cityAr: info.cityAr || 'الرياض',
             cityEn: info.cityEn || 'Riyadh',
-            countryAr: 'المملكة العربية السعودية',
-            countryEn: 'Saudi Arabia',
+            countryAr: cAr,
+            countryEn: cEn,
             addressAr: `المقر الرئيسي، ${info.cityAr || 'الرياض'}`,
             addressEn: `Headquarters, ${info.cityEn || 'Riyadh'}`,
             phone: info.phone || '+966 11 000 0000',
@@ -1284,6 +1291,7 @@ class FirmService {
         messages: [],
         savedAt: new Date().toISOString(),
       },
+
       subscription: {
         planTier: 'starter',
         planNameAr: 'الباقة السنوية القياسية للمحامي',
