@@ -238,6 +238,21 @@ class FirmService {
   public async init(): Promise<void> {
     if (this.isInitialized) return;
 
+    // 0. Fetch Supabase config from server API first if available
+    if (typeof fetch !== 'undefined') {
+      try {
+        const res = await fetch('/api/supabase/config');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.config && json.config.url && json.config.anonKey) {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('aladl_supabase_config_v1', JSON.stringify(json.config));
+            }
+          }
+        }
+      } catch {}
+    }
+
     // 1. Read local cache FIRST for instant UI
     try {
       const raw = localStorage.getItem(STORAGE_KEY_FIRMS);
@@ -251,20 +266,16 @@ class FirmService {
       console.warn('Error reading local firms cache', e);
     }
 
-    // 2. If no local cache, seed defaults
+    // 2. Fetch from Express server backend (/api/firms) to get shared firms across browsers/sessions
+    await this.fetchFromServer().catch(() => {});
+
+    // 3. Fetch from Supabase as well if configured
+    await this.fetchFromSupabase().catch(() => {});
+
+    // 4. If still no firms, seed defaults
     if (this.memoryFirms.length === 0) {
       this.memoryFirms = createDefaultFirms();
       this.saveToLocalCache();
-    }
-
-    // 3. IMPORTANT: Fetch from Supabase as the primary source if configured
-    // We try to do this BEFORE marking as fully initialized if possible, 
-    // or at least ensure it updates the state.
-    const supabaseRes = await this.fetchFromSupabase().catch(() => ({ success: false }));
-    
-    if (!supabaseRes.success) {
-      // 4. Fallback to server /api/firms if Supabase failed or not configured
-      await this.fetchFromServer().catch(() => {});
     }
 
     this.isInitialized = true;
