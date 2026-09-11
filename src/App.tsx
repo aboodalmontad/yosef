@@ -73,7 +73,6 @@ export default function App() {
     const loadAppData = async () => {
       // 1. Initialize services (this now waits for Supabase if configured)
       await firmService.init();
-      storageService.init();
 
       // 2. Determine which firm to load from URL or defaults
       const urlParams = new URLSearchParams(window.location.search);
@@ -102,6 +101,11 @@ export default function App() {
             }
           }
         } catch {}
+
+        // Load the fetched firm data into storage service so database records display correctly
+        storageService.loadFirm(urlSlug, true);
+      } else {
+        storageService.init();
       }
 
       refreshData();
