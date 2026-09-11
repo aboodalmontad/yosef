@@ -53,17 +53,17 @@ export function ensureFirmSubscription(firm: LawFirm): LawFirm {
   return firm;
 }
 
-// Initial default seed firms for the multi-tenant SaaS platform
+// Initial default seed firms for the multi-tenant SaaS platform (with empty datasets so users enter their own real data)
 export function createDefaultFirms(): LawFirm[] {
-  const primaryData: LawFirmData = {
+  const emptyData: LawFirmData = {
     settings: { ...initialSiteSettings },
-    partners: [...initialPartners],
-    practiceAreas: [...initialPracticeAreas],
-    caseStudies: [...initialCaseStudies],
-    testimonials: [...initialTestimonials],
-    blogPosts: [...initialBlogPosts],
-    offices: [...initialOffices],
-    messages: [...initialContactMessages],
+    partners: [],
+    practiceAreas: [],
+    caseStudies: [],
+    testimonials: [],
+    blogPosts: [],
+    offices: [],
+    messages: [],
     savedAt: new Date().toISOString(),
   };
 
@@ -72,25 +72,25 @@ export function createDefaultFirms(): LawFirm[] {
   const primaryFirm: LawFirm = {
     id: toValidUUID('firm-al-adl'),
     slug: 'al-adl',
-    nameAr: initialSiteSettings.firmNameAr || 'شركة العدل والريادة للمحاماة والاستشارات القانونية',
-    nameEn: initialSiteSettings.firmNameEn || 'Al-Adl & Leadership Law Firm',
-    nameTr: initialSiteSettings.firmNameTr || 'Al-Adl Hukuk Bürosu',
-    taglineAr: initialSiteSettings.sloganAr || 'ريادة قانونية وحلول استراتيجية رصينة',
-    taglineEn: initialSiteSettings.sloganEn || 'Legal Excellence & Strategic Counsel',
+    nameAr: 'شركة العدل والريادة للمحاماة والاستشارات القانونية',
+    nameEn: 'Al-Adl & Leadership Law Firm',
+    nameTr: 'Al-Adl Hukuk Bürosu',
+    taglineAr: 'ريادة قانونية وحلول استراتيجية رصينة',
+    taglineEn: 'Legal Excellence & Strategic Counsel',
     cityAr: 'الرياض',
     cityEn: 'Riyadh',
     countryAr: 'المملكة العربية السعودية',
     countryEn: 'Saudi Arabia',
-    phone: initialSiteSettings.contactPhone || '+966 11 456 7890',
-    email: initialSiteSettings.contactEmail || 'contact@aladl-law.com',
-    licenseNumber: initialSiteSettings.licenseNumber || 'SA-LAW-2010-884',
-    adminPassword: initialSiteSettings.adminPassword || 'AlAdlAdmin2025',
+    phone: '+966 11 456 7890',
+    email: 'contact@aladl-law.com',
+    licenseNumber: 'SA-LAW-2010-884',
+    adminPassword: 'AlAdlAdmin2025',
     isVerified: true,
     featured: true,
     themeColor: '#c5a869',
     createdAt: '2024-01-10T10:00:00Z',
     updatedAt: new Date().toISOString(),
-    data: primaryData,
+    data: emptyData,
     subscription: {
       planTier: 'enterprise',
       planNameAr: 'الباقة السنوية الماسية الشاملة',
@@ -106,6 +106,7 @@ export function createDefaultFirms(): LawFirm[] {
       notes: 'المقر الرئيسي للمنصة - ترخيص دائم ومفعل',
     },
   };
+
 
   // Firm 2: Nahwi Law & International Arbitration (customized for user's domain/email avocat.a.nahwi@gmail.com)
   const nahwiSettings: SiteSettings = {
@@ -148,7 +149,7 @@ export function createDefaultFirms(): LawFirm[] {
     createdAt: '2024-02-15T12:00:00Z',
     updatedAt: new Date().toISOString(),
     data: {
-      ...primaryData,
+      ...emptyData,
       settings: nahwiSettings,
       savedAt: new Date().toISOString(),
     },
@@ -202,7 +203,7 @@ export function createDefaultFirms(): LawFirm[] {
     createdAt: '2024-03-01T09:00:00Z',
     updatedAt: new Date().toISOString(),
     data: {
-      ...primaryData,
+      ...emptyData,
       settings: eliteSettings,
       savedAt: new Date().toISOString(),
     },
@@ -237,14 +238,13 @@ class FirmService {
   public async init(): Promise<void> {
     if (this.isInitialized) return;
 
-    // 1. Read local cache
+    // 1. Read local cache FIRST for instant UI
     try {
       const raw = localStorage.getItem(STORAGE_KEY_FIRMS);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           this.memoryFirms = parsed.map((f: LawFirm) => ensureFirmSubscription(f));
-          this.isInitialized = true;
         }
       }
     } catch (e) {
@@ -257,13 +257,76 @@ class FirmService {
       this.saveToLocalCache();
     }
 
-    // 3. Try to fetch from server /api/firms in background
-    this.fetchFromServer().catch(() => {});
-
-    // 4. Try to fetch from Supabase in background if configured
-    this.fetchFromSupabase().catch(() => {});
+    // 3. IMPORTANT: Fetch from Supabase as the primary source if configured
+    // We try to do this BEFORE marking as fully initialized if possible, 
+    // or at least ensure it updates the state.
+    const supabaseRes = await this.fetchFromSupabase().catch(() => ({ success: false }));
+    
+    if (!supabaseRes.success) {
+      // 4. Fallback to server /api/firms if Supabase failed or not configured
+      await this.fetchFromServer().catch(() => {});
+    }
 
     this.isInitialized = true;
+  }
+
+  // Fetch a single firm by its slug directly from Supabase
+  public async fetchSingleFirmFromSupabase(slug: string): Promise<{ success: boolean; firm?: LawFirm; message?: string }> {
+    const config = getStoredSupabaseConfig();
+    if (!config.url || !config.anonKey) {
+      return { success: false, message: 'Supabase غير مهيأ' };
+    }
+
+    try {
+      const client = getSupabase();
+      const { data, error } = await client
+        .from(config.tableName || 'law_firms')
+        .select('*')
+        .eq('slug', slug)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        const row = data;
+        const rawSub = row.subscription || row.data?.subscription;
+        const firm: LawFirm = ensureFirmSubscription({
+          id: row.id,
+          slug: row.slug,
+          nameAr: row.name_ar,
+          nameEn: row.name_en || '',
+          nameTr: row.name_tr || '',
+          taglineAr: row.tagline_ar || '',
+          taglineEn: row.tagline_en || '',
+          cityAr: row.city_ar || '',
+          cityEn: row.city_en || '',
+          phone: row.phone || '',
+          email: row.email || '',
+          licenseNumber: row.license_number || '',
+          adminPassword: row.admin_password || '123456',
+          isVerified: row.is_verified ?? true,
+          featured: row.featured ?? false,
+          isDefaultPublic: row.is_default_public ?? (row.slug === 'nahwi-law'),
+          themeColor: row.theme_color || '#c5a869',
+          createdAt: row.created_at || new Date().toISOString(),
+          updatedAt: row.updated_at || new Date().toISOString(),
+          data: row.data || {},
+          subscription: rawSub,
+        });
+
+        // Update in memory and cache
+        const idx = this.memoryFirms.findIndex(f => f.slug === slug);
+        if (idx >= 0) {
+          this.memoryFirms[idx] = firm;
+        } else {
+          this.memoryFirms.push(firm);
+        }
+        this.saveToLocalCache();
+        return { success: true, firm };
+      }
+      return { success: false, message: 'المكتب غير موجود سحابياً' };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
   }
 
   private saveToLocalCache(): void {

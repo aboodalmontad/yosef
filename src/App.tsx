@@ -70,16 +70,30 @@ export default function App() {
   };
 
   useEffect(() => {
-    firmService.init().then(() => {
+    const loadAppData = async () => {
+      // 1. Initialize services (this now waits for Supabase if configured)
+      await firmService.init();
       storageService.init();
+
+      // 2. Determine which firm to load from URL or defaults
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlSlug = urlParams.get('firm') || firmService.getActiveFirmSlug();
+      
+      // 3. Force fetch the LATEST data for THIS SPECIFIC office from Supabase
+      if (urlSlug) {
+        // This ensures the public site always gets the freshest cloud data
+        await firmService.fetchSingleFirmFromSupabase(urlSlug).catch(() => {});
+      }
+
       refreshData();
 
-      // Check URL parameters for direct super admin access (?admin=super or ?super=1)
-      const urlParams = new URLSearchParams(window.location.search);
+      // Check for direct super admin access
       if (urlParams.get('admin') === 'super' || urlParams.get('super') === '1' || urlParams.get('superadmin') === 'true') {
         setIsSuperAdminOpen(true);
       }
-    });
+    };
+
+    loadAppData();
 
     // Listen for live updates from Admin Dashboard and Firm Switcher
     const handleStorageChange = () => {
