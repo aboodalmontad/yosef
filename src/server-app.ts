@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
 import { 
   initialPartners, 
   initialPracticeAreas, 
@@ -174,14 +175,74 @@ app.get('/api/firms', (_req, res) => {
   }
 });
 
-app.get('/api/firms/:slug', (req, res) => {
+app.get('/api/firms/:slug', async (req, res) => {
   try {
     const slug = req.params.slug.toLowerCase().trim();
-    if (!fs.existsSync(FIRMS_DATA_PATH)) return res.status(404).json({ success: false });
-    const firms = JSON.parse(fs.readFileSync(FIRMS_DATA_PATH, 'utf-8'));
+    let firms = [];
+    if (fs.existsSync(FIRMS_DATA_PATH)) {
+      try {
+        firms = JSON.parse(fs.readFileSync(FIRMS_DATA_PATH, 'utf-8'));
+      } catch {}
+    }
     const found = firms.find((f: any) => f.slug?.toLowerCase() === slug);
     if (found) return res.json({ success: true, data: found });
-    return res.status(404).json({ success: false });
+
+    // Fallback: Query Supabase directly from server if configured
+    let sbConfig: any = null;
+    if (fs.existsSync(SUPABASE_CONFIG_PATH)) {
+      try {
+        sbConfig = JSON.parse(fs.readFileSync(SUPABASE_CONFIG_PATH, 'utf-8'));
+      } catch {}
+    }
+    const sbUrl = sbConfig?.url || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const sbKey = sbConfig?.anonKey || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
+    if (sbUrl && sbKey) {
+      try {
+        const sbClient = createClient(sbUrl, sbKey);
+        const tableName = sbConfig?.tableName || 'law_firms';
+        const { data, error } = await sbClient
+          .from(tableName)
+          .select('*')
+          .eq('slug', slug)
+          .single();
+
+        if (!error && data) {
+          const row = data;
+          const rawSub = row.subscription || row.data?.subscription;
+          const firm = {
+            id: row.id,
+            slug: row.slug,
+            nameAr: row.name_ar,
+            nameEn: row.name_en || '',
+            nameTr: row.name_tr || '',
+            taglineAr: row.tagline_ar || '',
+            taglineEn: row.tagline_en || '',
+            cityAr: row.city_ar || '',
+            cityEn: row.city_en || '',
+            phone: row.phone || '',
+            email: row.email || '',
+            licenseNumber: row.license_number || '',
+            adminPassword: row.admin_password || '123456',
+            isVerified: row.is_verified ?? true,
+            featured: row.featured ?? false,
+            isDefaultPublic: row.is_default_public ?? (row.slug === 'nahwi-law'),
+            themeColor: row.theme_color || '#c5a869',
+            createdAt: row.created_at || new Date().toISOString(),
+            updatedAt: row.updated_at || new Date().toISOString(),
+            data: row.data || {},
+            subscription: rawSub,
+          };
+          firms.push(firm);
+          fs.writeFileSync(FIRMS_DATA_PATH, JSON.stringify(firms, null, 2), 'utf-8');
+          return res.json({ success: true, data: firm });
+        }
+      } catch (err) {
+        console.warn('Server Supabase fetch error for slug:', slug, err);
+      }
+    }
+
+    return res.status(404).json({ success: false, error: 'Firm not found' });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
